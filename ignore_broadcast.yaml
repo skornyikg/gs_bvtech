@@ -1,0 +1,14 @@
+---
+- hosts: bvtest 
+  remote_user: ec2-user 
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: disable broadcast
+    sysctl:
+      name: net.ipv4.icmp_echo_ignore_broadcasts
+      value: '1'
+      state: present
+      reload: yes
+
+

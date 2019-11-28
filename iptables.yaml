@@ -1,0 +1,59 @@
+---
+- hosts: iptbls
+  remote_user: ec2-user
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: install prereq.
+    yum:
+      name: iptables-services
+  - name: copy firewall.conf to remote
+    copy:
+      src: files/firewall.conf
+      dest: /etc/rsyslog.d/firewall.conf
+      owner: root
+      group: root
+      mode: 0644
+    notify: restart rsyslogd
+  - name: enable iptables service
+    systemd:
+      name: iptables
+      masked: no
+      enabled: yes
+      state: started
+  - name: create iptables rules
+    shell:
+      cmd: iptables -N chain-incoming-log-and-drop
+    notify: save_iptables
+  - name: create LOG rule
+    shell:
+      cmd: iptables -A chain-incoming-log-and-drop -j LOG --log-prefix "[INCOMING-DROP] " -m limit --limit 2/min --limit-burst 4
+    notify: save_iptables
+  - name: create DROP rule
+    shell:
+      cmd: iptables -A chain-incoming-log-and-drop -j DROP
+    notify: save_iptables
+  - name: create icmp rule
+    shell:
+      cmd: iptables -A INPUT -p icmp -j chain-incoming-log-and-drop
+    notify: save_iptables
+  - name: create tcp/80 rule
+    shell:
+      cmd: iptables -A INPUT -p tcp --dport 80 -j chain-incoming-log-and-drop
+    notify: save_iptables
+  - name: create tcp/443 rule
+    shell:
+      cmd: iptables -A INPUT -p tcp --dport 443 -j chain-incoming-log-and-drop
+    notify: save_iptables
+
+
+  handlers:
+  - name: restart rsyslogd
+    service:
+      name: rsyslog
+      state: restarted
+  - name: save_iptables
+    shell:
+      cmd: service iptables save
+      warn: false
+

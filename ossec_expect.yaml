@@ -1,0 +1,69 @@
+---
+- hosts: bvossec
+  remote_user: ec2-user
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: install ossec prereq. 
+    yum:
+      name: 
+        - pcre2
+        - pcre2-devel
+        - zlib-devel
+        - mutt
+        - python-pip
+        - gcc
+      state: present
+  - name: install pexpect > 3.0
+    pip:
+      name: pexpect
+  - name: download ossec install 
+    get_url:
+      url: https://github.com/ossec/ossec-hids/archive/3.3.0.tar.gz
+      dest: /tmp/ossec.tar.gz
+  - name: extract ossec install
+    unarchive:
+      remote_src: yes
+      src: /tmp/ossec.tar.gz
+      dest: /tmp
+  - name: download pcre2
+    get_url: 
+      url: https://ftp.pcre.org/pub/pcre/pcre2-10.32.tar.gz
+      dest: /tmp
+  - name: unarchive pcre2
+    unarchive:
+      remote_src: yes
+      src: /tmp/pcre2-10.32.tar.gz
+      dest: /tmp/
+  - name: set PCRE2_SYSTEM
+    environment: 
+      PCRE2_SYSTEM: yes
+    shell: "echo $PCRE2_SYSTEM"
+  - name: install OSSEC local
+    environment:
+      PCRE2_SYSTEM: yes
+    expect:
+      echo: yes
+      chdir: /tmp/ossec-hids-3.3.0
+      command: /tmp/ossec-hids-3.3.0/install.sh
+      timeout: 900 
+      responses:
+        (.*) \[en\]:(.*): "en"
+        (.*)Press ENTER to continue or Ctrl-C to abort(.*): ""
+        (.*)What kind of installation do you want (.*): "local"
+        (.*)Choose where to install the OSSEC HIDS(.*): "/var/ossec"
+        (.*)Do you want e-mail notification?(.*): "y"
+        (.*)What's your e-mail address(.*): "root@localhost"
+        (.*)Do you want to use it(.*): "y"
+        (.*)Do you want to run the integrity check daemon(.*): "Y"
+        (.*)Do you want to run the rootkit detection engine(.*): "y"
+        (.*)Do you want to enable active response(.*): "y"
+        (.*)Do you want to enable the firewall-drop response(.*): "y"
+        (.*)Do you want to add more IPs to the white list(.*): "n"
+        (.*)Press ENTER to continue(.*): ""
+        (.*)Press ENTER to finish(.*): ""
+  - name: start OSSEC
+    shell:
+      cmd: /var/ossec/bin/ossec-control start
+
+

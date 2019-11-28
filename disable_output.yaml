@@ -1,0 +1,52 @@
+---
+- hosts: iptbls
+  remote_user: ec2-user
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: install prereq.
+    yum:
+      name: iptables-services
+  - name: enable iptables service
+    systemd:
+      name: iptables
+      masked: no
+      enabled: yes
+      state: started
+  - name: clean up iptables rules
+    shell:
+      cmd: "{{ item }}"
+    notify: save_iptables
+    with_items:
+      - iptables -P INPUT   ACCEPT
+      - iptables -P OUTPUT  ACCEPT
+      - iptables -P FORWARD ACCEPT
+      - iptables -Z
+      - iptables -F
+      - iptables -X
+  - name: create rules
+    shell:
+      cmd: "{{ item }}"
+    with_items:
+      - iptables -A INPUT -i lo -j ACCEPT
+      - iptables -A OUTPUT -o lo -j ACCEPT
+      - iptables -A INPUT -p tcp -m tcp --dport 80 -j ACCEPT
+      - iptables -A INPUT -p tcp -m tcp --dport 443 -j ACCEPT
+      - iptables -A INPUT -p tcp -m tcp --dport 22 -j ACCEPT
+      - iptables -A INPUT -p icmp -j DROP
+      - iptables -A INPUT  --proto udp --sport 53 --jump ACCEPT
+      - iptables -A INPUT  --match state --state ESTABLISHED,RELATED --jump ACCEPT
+      - iptables -A OUTPUT --proto udp --dport 53 --jump ACCEPT
+      - iptables -A OUTPUT --proto tcp --dport 53 --jump ACCEPT
+      - iptables -A OUTPUT --match state --state ESTABLISHED,RELATED --jump ACCEPT
+      - iptables -A OUTPUT -p tcp -m tcp --dport 80 -j ACCEPT
+      - iptables -A OUTPUT -p tcp -m tcp --dport 443 -j ACCEPT
+      - iptables -P INPUT   DROP
+      - iptables -P OUTPUT  DROP
+      - iptables -P FORWARD DROP
+    notify: save_iptables
+  handlers:
+  - name: save_iptables
+    shell:
+      cmd: service iptables save
+      warn: false

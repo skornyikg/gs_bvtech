@@ -1,0 +1,27 @@
+---
+- hosts: bvtest 
+  remote_user: ec2-user 
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: install libselinux
+    yum:
+      name: 
+        - libselinux-python
+        - libsemanage-python
+      state: present
+  - name: Enable SELinux
+    selinux:
+      policy: targeted
+      state: enforcing
+    register: reboot_required
+  - name: reboot the system
+    reboot:
+      connect_timeout: 120
+      reboot_timeout: 120
+    when: reboot_required.reboot_required == true
+  - name: Set selinux antivirus_can_scan_system 
+    seboolean:
+      name: antivirus_can_scan_system
+      state: yes
+      persistent: yes

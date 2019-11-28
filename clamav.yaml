@@ -1,0 +1,107 @@
+---
+- hosts: bvtest 
+  remote_user: ec2-user 
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: Set selinux antivirus_can_scan_system 
+    seboolean:
+      name: antivirus_can_scan_system
+      state: yes
+      persistent: yes
+  - name: Check EPEL repo
+    stat: path="/etc/yum.repos.d/epel.repo"
+    register: epel_repofile_result
+  - name: Install EPEL repo.
+    yum:
+      name: "https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm"
+      state: present
+    register: result
+    when: not epel_repofile_result.stat.exists
+  - name: Import EPEL GPG key.
+    rpm_key:
+      key: "https://dl.fedoraproject.org/pub/epel/RPM-GPG-KEY-EPEL-7"
+      state: present
+    when: not epel_repofile_result.stat.exists
+  - name: Install ClamAV
+    yum: 
+      name: 
+        - clamav
+        - clamav-scanner 
+        - clamav-update
+      state: latest
+
+  - name: run freshclam
+    command: freshclam
+    notify: restart clamd@scan
+  - name: stat clamd scan.conf
+    stat: path=/etc/clamd.d/scan.conf
+    register: clamd_scan_conf_stat
+  - name: edit clamav scan.conf
+    replace: 
+      path: /etc/clamd.d/scan.conf
+      regexp: 'Example'
+      replace: '#Example'
+    when: clamd_scan_conf_stat.stat.exists
+    notify: restart clamd@scan
+  - name: edit clamav scan.conf
+    replace:
+      path: /etc/clamd.d/scan.conf
+      regexp: '#LocalSocket /var/run/clamd.scan/clamd.sock'
+      replace: 'LocalSocket /var/run/clamd.scan/clamd.sock'
+    when: clamd_scan_conf_stat.stat.exists
+    notify: restart clamd@scan
+  - name: copy clamd.service to remote
+    copy:
+      src: files/clamd.service
+      dest: /usr/lib/systemd/system/clamd.service
+      owner: root
+      group: root
+      mode: 0644
+    notify: restart clamd@scan
+  - name: stat clamd clamd.conf
+    stat: path=/etc/clamd.d/clamd.conf
+    register: clamd_conf_stat
+  - name: copy clamd.conf to remote
+    copy:
+      src: files/clamd.conf
+      dest: /etc/clamd.d/clamd.conf
+      owner: root
+      group: root
+      mode: 0644
+    when: not clamd_conf_stat.stat.exists
+    notify: restart clamd@scan
+  - name: stat clamd clamd.service
+    stat: path=/usr/lib/systemd/system/clamd.service
+    register: clamd_service_stat
+  - name: copy clamd.service to remote
+    copy:
+      src: files/clamd.service
+      dest: /usr/lib/systemd/system/clamd.service
+      owner: root
+      group: root
+      mode: 0644
+    when: not clamd_service_stat.stat.exists
+    notify: restart clamd@scan
+  - name: Make sure clamd@scan.service is enabled
+    systemd:
+      enabled: yes
+      masked: no
+      name: clamd@scan
+  - name: copy clamd.service to remote
+    copy:
+      src: files/freshclam.service
+      dest: /usr/lib/systemd/system/freshclam.service
+      owner: root
+      group: root
+      mode: 0644
+  - name: start freshclam.service
+    service:
+      name: freshclam.service
+      state: started
+      enabled: yes
+  handlers:
+  - name: restart clamd@scan
+    service:
+      name: clamd@scan
+      state: restarted

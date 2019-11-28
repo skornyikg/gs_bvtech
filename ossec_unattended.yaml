@@ -1,0 +1,45 @@
+---
+- hosts: bvossec
+  remote_user: ec2-user
+  become: yes
+  become_method: sudo
+  tasks:
+  - name: install ossec prereq. 
+    yum:
+      name: 
+        - pcre2
+        - pcre2-devel
+        - zlib-devel
+        - mutt
+        - python-pip
+        - gcc
+      state: present
+  - name: install pexpect > 3.0
+    pip:
+      name: pexpect
+  - name: download ossec install 
+    get_url:
+      url: https://github.com/ossec/ossec-hids/archive/3.3.0.tar.gz
+      dest: /tmp/ossec.tar.gz
+  - name: extract ossec install
+    unarchive:
+      remote_src: yes
+      src: /tmp/ossec.tar.gz
+      dest: /tmp
+  - name: copy preloaded-vars.conf to remote
+    copy:
+      src: files/preloaded-vars.conf
+      dest: /tmp/ossec-hids-3.3.0/etc/preloaded-vars.conf
+      owner: root
+      group: root
+      mode: 0644
+  - name: install OSSEC local
+    environment:
+      PCRE2_SYSTEM: yes
+    shell:
+      cmd: cd /tmp/ossec-hids-3.3.0; ./install.sh
+  - name: start OSSEC
+    shell:
+      cmd: /var/ossec/bin/ossec-control start
+
+
